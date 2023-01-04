@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig-cjs.json"
   },
-  "author": "",
+  "author": "CreatorDB",
   "license": "ISC",
   "dependencies": {
     "bluebird": "^3.7.2",
