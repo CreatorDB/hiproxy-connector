@@ -60,11 +60,31 @@ export class HiProxyConnector {
     }
   }
 
+  public async occupyAndRun<T>(allowUsingCount: number, retry: number, release: boolean, task: (proxy: ProxyServer) => Promise<T>): Promise<T | Error> {
+    try {
+      const proxyServer = await this.occupyProxy(allowUsingCount, retry);
+      if (proxyServer === null) {
+        return new Error('NoEmptyProxy');
+      }
+      try {
+        const result = await task(proxyServer);
+        return result;
+      } catch (e) {
+        await this.releaseProxy(proxyServer.id, release);
+        return e as Error;
+      }
+    } catch (e) {
+      return e as Error;
+    }
+  }
+
   public wrapOptionWithProxyServer(option: RequestOption, proxyServer: ProxyServer, ipFamily: 4 | 6): RequestOption {
     const proxy = `socks5://${proxyServer.ipv4}:${this.socksPort}`;
     option.agent = new SocksProxyAgent(proxy);
     option.family = ipFamily;
-    option.lookup = (domain: any, options: any, callback: any) => dns.lookup(domain, { family: ipFamily }, callback);
+    if (option.lookup === undefined) {
+      option.lookup = (domain: any, options: any, callback: any) => dns.lookup(domain, { family: ipFamily }, callback);
+    }
     return option;
   }
 
