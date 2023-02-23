@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import Request from 'request';
 import { ProxyServer } from './struct';
-declare type RequestOption = Request.CoreOptions & Request.RequiredUriUrl & {
+type RequestOption = Request.CoreOptions & Request.RequiredUriUrl & {
     lookup?: (domain: any, options: any, callback: any) => void;
 };
 export declare class HiProxyConnector {

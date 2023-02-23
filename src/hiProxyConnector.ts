@@ -70,8 +70,11 @@ export class HiProxyConnector {
         const result = await task(proxyServer);
         return result;
       } catch (e) {
-        await this.releaseProxy(proxyServer.id, release);
         return e as Error;
+      } finally {
+        try {
+          await this.releaseProxy(proxyServer.id, release);
+        } catch { }
       }
     } catch (e) {
       return e as Error;
