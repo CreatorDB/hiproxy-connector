@@ -105,7 +105,7 @@ export class HiProxyConnector {
     const proxy =
       account === ''
         ? `socks5://${proxyServer.ipv4}:${this.socksPort}`
-        : `socks5://${account}:${password}@${proxyServer.ipv4}:${this.socksPort}`;
+        : `socks5://${account}:${password}@${proxyServer.ipv4}:${proxyServer.ipv4Port}`;
     option.agent = new SocksProxyAgent(proxy);
     option.family = ipFamily;
     if (option.lookup === undefined) {

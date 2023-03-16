@@ -10,5 +10,7 @@ export interface ProxyServer {
   id: string;
   ipv4: string;
   ipv6: string;
+  ipv4Port: number;
+  ipv6Port: number;
   usingCount: number;
 }
