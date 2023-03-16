@@ -5,7 +5,7 @@ import Bluebird from 'bluebird';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 import { ProxyServer, RespProxyServer, RespProxyServers } from './struct';
 
-type RequestOption = Request.CoreOptions &
+export type RequestOption = Request.CoreOptions &
   Request.RequiredUriUrl & { lookup?: (domain: any, options: any, callback: any) => void };
 
 export class HiProxyConnector {
@@ -22,18 +22,25 @@ export class HiProxyConnector {
     this.socksPort = socksPort;
   }
 
-  public async getProxyServers(useCountLessThan: number): Promise<ProxyServer[]> {
-    const json = await request(`http://${this.masterIP}:${this.masterPort}/listProxy`);
+  public async getProxyServers(useCountLessThan: number, source: string = 'hinet'): Promise<ProxyServer[]> {
+    const json = await request(`http://${this.masterIP}:${this.masterPort}/listProxy/${source}`);
     const proxyServers: RespProxyServers = JSON.parse(json);
     return proxyServers.servers.filter(s => {
       return s.usingCount < useCountLessThan;
     });
   }
 
-  public async occupyProxy(allowUsingCount: number, retry: number = 0): Promise<null | ProxyServer> {
+  public async occupyProxy(
+    allowUsingCount: number,
+    source = 'hinet',
+    usingSeconds = 180_000,
+    retry = 0
+  ): Promise<null | ProxyServer> {
     let proxyServer: RespProxyServer = { server: null };
     for (let r = 0; r < retry + 1 && proxyServer.server === null; r++) {
-      const json = await request(`http://${this.masterIP}:${this.masterPort}/useProxy/${allowUsingCount}`);
+      const json = await request(
+        `http://${this.masterIP}:${this.masterPort}/useProxy/${allowUsingCount}/${source}/${usingSeconds}`
+      );
       proxyServer = JSON.parse(json);
       if (proxyServer.server !== null) {
         return proxyServer.server;
@@ -60,9 +67,16 @@ export class HiProxyConnector {
     }
   }
 
-  public async occupyAndRun<T>(allowUsingCount: number, retry: number, release: boolean, task: (proxy: ProxyServer) => Promise<T>): Promise<T | Error> {
+  public async occupyAndRun<T>(
+    allowUsingCount: number,
+    source = 'hinet',
+    usingSeconds = 180_000,
+    retry = 10,
+    release = true,
+    task: (proxy: ProxyServer) => Promise<T>
+  ): Promise<T | Error> {
     try {
-      const proxyServer = await this.occupyProxy(allowUsingCount, retry);
+      const proxyServer = await this.occupyProxy(allowUsingCount, source, usingSeconds, retry);
       if (proxyServer === null) {
         return new Error('NoEmptyProxy');
       }
@@ -74,15 +88,24 @@ export class HiProxyConnector {
       } finally {
         try {
           await this.releaseProxy(proxyServer.id, release);
-        } catch { }
+        } catch {}
       }
     } catch (e) {
       return e as Error;
     }
   }
 
-  public wrapOptionWithProxyServer(option: RequestOption, proxyServer: ProxyServer, ipFamily: 4 | 6): RequestOption {
-    const proxy = `socks5://${proxyServer.ipv4}:${this.socksPort}`;
+  public wrapOptionWithProxyServer(
+    option: RequestOption,
+    proxyServer: ProxyServer,
+    ipFamily: 4 | 6,
+    account = '',
+    password = ''
+  ): RequestOption {
+    const proxy =
+      account === ''
+        ? `socks5://${proxyServer.ipv4}:${this.socksPort}`
+        : `socks5://${account}:${password}@${proxyServer.ipv4}:${this.socksPort}`;
     option.agent = new SocksProxyAgent(proxy);
     option.family = ipFamily;
     if (option.lookup === undefined) {
@@ -94,11 +117,15 @@ export class HiProxyConnector {
   // multiple requests with one proxy
   public async socksRequestWithOptions(
     options: RequestOption[],
-    refresh: boolean
+    allowUsingCount: number,
+    source = 'hinet',
+    usingSeconds = 180_000,
+    retry = 10,
+    release = true
   ): Promise<{ proxyServer: ProxyServer; results: (string | Buffer | Error)[] }> {
     // if refresh = true, need uniq proxy
     // if refresh = false, no care about uniq proxy
-    const proxyServer = await this.occupyProxy(refresh ? 0 : Number.MAX_VALUE, 10);
+    const proxyServer = await this.occupyProxy(allowUsingCount, source, usingSeconds, retry);
     if (proxyServer === null) {
       throw new Error(`NoProxyFound`);
     }
@@ -119,7 +146,7 @@ export class HiProxyConnector {
       promises.push(promise);
     }
     const results = await Promise.all(promises);
-    await this.releaseProxy(proxyServer.id, refresh);
+    await this.releaseProxy(proxyServer.id, release);
     return { proxyServer, results };
   }
 }
